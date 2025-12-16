@@ -1,4 +1,4 @@
-name: Build Flutter APK
+name: Build WebView APK
 
 on:
   push:
@@ -11,43 +11,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout source
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      # 2️⃣ Java (required by Android / Gradle)
-      - name: Set up Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'zulu'
           java-version: '17'
 
-      # 3️⃣ Flutter (FIXED – no version conflict)
-      - name: Set up Flutter
-        uses: subosito/flutter-action@v2
+      - uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          channel: 'stable'
+          flutter-version: '3.19.0'
           cache: true
 
-      # 4️⃣ Verify Flutter install (debug safety)
-      - name: Flutter doctor
-        run: flutter doctor -v
+      # 1. Генерируем нативные файлы Android
+      - name: Generate Android Project
+        run: flutter create . --project-name=webview_ci_app --org com.bowlmates.app
 
-      # 5️⃣ Install dependencies
-      - name: Get dependencies
+      # 2. Исправляем minSdkVersion (заменяем всю строку на жестко заданную версию 21)
+      - name: Fix minSdkVersion in build.gradle
+        run: |
+          sed -i 's|minSdkVersion .*|minSdkVersion 21|g' android/app/build.gradle
+          echo "Patched minSdkVersion to 21"
+
+      # 3. ИСПРАВЛЕНО: Добавляем разрешение INTERNET.
+      # Используем разделитель '|' вместо '/', так как внутри тега есть '/'
+      - name: Add Internet Permission
+        run: |
+          sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <application|g' android/app/src/main/AndroidManifest.xml
+          echo "Injected Internet Permission into AndroidManifest"
+
+      - name: Get Dependencies
         run: flutter pub get
 
-      # 6️⃣ Static analysis (non-fatal)
-      - name: Analyze
-        run: flutter analyze
-
-      # 7️⃣ Build release APK
       - name: Build APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      # 8️⃣ Upload APK artifact
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: flutter-app-release
+          name: webview-app-release
           path: build/app/outputs/flutter-apk/app-release.apk
